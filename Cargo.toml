@@ -1,0 +1,15 @@
+[package]
+name = "discord-caps-copy-paste"
+version = "0.1.0"
+edition = "2024"
+description = "Launch a fresh Codex CLI prompt in a random installed terminal and attach it to Discord via Tether."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/realagiorganization/discord-caps-copy-paste"
+keywords = ["codex", "discord", "tether", "terminal"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.53", features = ["derive", "env"] }
+rand = "0.8.5"

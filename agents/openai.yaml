@@ -1,0 +1,7 @@
+interface:
+  display_name: "Discord Caps Copy Paste"
+  short_description: "Launch Discord prompts into tethered Codex terminals."
+  default_prompt: "Use $discord-caps-copy-paste to launch this Discord prompt into a new tethered Codex terminal session."
+
+policy:
+  allow_implicit_invocation: true
