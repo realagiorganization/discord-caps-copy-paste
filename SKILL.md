@@ -14,6 +14,7 @@ Use this skill when the user wants a prompt copied from Discord, the clipboard, 
 3. Let the tool choose a random installed terminal unless the user asks for a specific terminal or you need deterministic automation.
 4. The tool checks Tether health, starts it if needed, launches Codex in the terminal, waits for a new `tether list --external -r codex` session, and runs `tether attach -p discord`.
 5. For deterministic verification, set `DCCP_TERMINAL_CANDIDATES=xterm`, `DCCP_RANDOM_SEED=<n>`, `DCCP_CODEX_BIN=./scripts/fake_codex.sh`, and `DCCP_TETHER_BIN=./scripts/fake_tether.sh`, then run `./scripts/run_docker_ui_test.sh`.
+6. Before shipping changes, run `./scripts/check.sh` so `fmt`, `clippy`, `test`, and the release build all pass together.
 
 ## Operator notes
 

@@ -256,13 +256,13 @@ pub fn resolve_prompt(explicit_prompt: Option<String>) -> Result<PromptSelection
         });
     }
 
-    if let Ok(value) = env::var("DCCP_PROMPT") {
-        if !value.trim().is_empty() {
-            return Ok(PromptSelection {
-                value,
-                source: "DCCP_PROMPT",
-            });
-        }
+    if let Ok(value) = env::var("DCCP_PROMPT")
+        && !value.trim().is_empty()
+    {
+        return Ok(PromptSelection {
+            value,
+            source: "DCCP_PROMPT",
+        });
     }
 
     for probe in [

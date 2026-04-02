@@ -32,6 +32,14 @@ cargo build --release
 
 The binary will be written to `target/release/discord-caps-copy-paste`.
 
+## Quality checks
+
+```bash
+./scripts/check.sh
+```
+
+This runs `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`, `cargo test --locked --workspace --all-targets --all-features`, and `cargo build --locked --release`.
+
 ## Usage
 
 Explicit prompt:

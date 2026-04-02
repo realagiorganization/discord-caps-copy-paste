@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.1 - 2026-04-02
+
+- Added `scripts/check.sh` as the single Rust quality gate for format, lint, test, and release-build verification.
+- Added GitHub Actions CI so pushes and pull requests run the Rust quality gate automatically.
+
 ## v0.1.0 - 2026-04-02
 
 - Initial public release of the Rust launcher that opens a fresh Codex CLI session in a randomly selected installed terminal.
