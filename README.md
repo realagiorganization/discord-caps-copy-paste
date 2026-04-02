@@ -2,6 +2,8 @@
 
 `discord-caps-copy-paste` is a compiled Rust launcher for one narrow workflow: take a Discord-style prompt from `--prompt`, `DCCP_PROMPT`, or the system clipboard, open a fresh Codex CLI session in a random installed terminal, then bind that new Codex session to Tether with `tether attach -p discord`.
 
+In practice that means the repo ships a small machine-side launcher for Discord-driven Codex handoffs: it resolves the prompt from CLI, env, or clipboard, picks a supported terminal, opens a fresh Codex CLI session there, waits for Tether to discover the new external runner, and attaches that session to Discord so the new terminal is immediately supervised by the existing bridge.
+
 ![discord-caps-copy-paste demo](docs/discord-caps-copy-paste-demo.gif)
 
 ## What it does
@@ -24,6 +26,29 @@
 - `xfce4-terminal`
 - `tilix`
 
+## Install
+
+Homebrew:
+
+```bash
+brew tap realagiorganization/tap
+brew install discord-caps-copy-paste
+```
+
+Debian or Kali from the tagged release `.deb` asset:
+
+```bash
+sudo apt-get install ./discord-caps-copy-paste_<version>_amd64.deb
+```
+
+Tagged releases publish:
+
+- a Debian package on the GitHub release page
+- a Homebrew formula asset that is mirrored into `realagiorganization/homebrew-tap`
+- a source archive used by the Homebrew formula
+
+The same published artifacts are consumed by the existing fleet rollout automation so known Linux and macOS peers can install or refresh the tool after publication.
+
 ## Build
 
 ```bash
@@ -39,6 +64,16 @@ The binary will be written to `target/release/discord-caps-copy-paste`.
 ```
 
 This runs `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`, `cargo test --locked --workspace --all-targets --all-features`, and `cargo build --locked --release`.
+
+## Release packaging
+
+Tagged releases build the Debian package, Homebrew formula asset, and source archive with:
+
+```bash
+python3 ./scripts/build_release_assets.py --release-tag v0.1.1
+```
+
+GitHub Actions uploads those artifacts to the matching GitHub Release and pushes the generated formula into `realagiorganization/homebrew-tap`.
 
 ## Usage
 

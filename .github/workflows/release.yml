@@ -1,0 +1,83 @@
+name: release
+
+"on":
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Tag to package and publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EVENT_NAME: ${{ github.event_name }}
+      RELEASE_TAG: >-
+        ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag ||
+        github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Debian packaging prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+
+      - name: Run quality checks
+        run: ./scripts/check.sh
+
+      - name: Build release assets
+        run: python3 ./scripts/build_release_assets.py --release-tag "$RELEASE_TAG" --dist-dir dist
+
+      - name: Publish GitHub release
+        run: |
+          PRERELEASE_FLAG=""
+          if [[ "${RELEASE_TAG#v}" =~ (^|[.-])(a|b|rc)[0-9]+$ ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" --clobber dist/*
+          else
+            gh release create "$RELEASE_TAG" $PRERELEASE_FLAG --generate-notes dist/*
+          fi
+
+      - name: Publish Homebrew formula
+        env:
+          PUBLISH_REPO_TOKEN: ${{ secrets.PUBLISH_REPO_TOKEN }}
+        run: |
+          test -n "$PUBLISH_REPO_TOKEN" || {
+            echo "Set PUBLISH_REPO_TOKEN with write access to realagiorganization/homebrew-tap"
+            exit 1
+          }
+          VERSION="${RELEASE_TAG#v}"
+          WORKDIR="$(mktemp -d)"
+          TAP_REPO_URL="https://x-access-token:${PUBLISH_REPO_TOKEN}@github.com/realagiorganization/homebrew-tap.git"
+          git clone "$TAP_REPO_URL" "$WORKDIR/homebrew-tap"
+          cp dist/discord-caps-copy-paste.rb "$WORKDIR/homebrew-tap/Formula/discord-caps-copy-paste.rb"
+          git -C "$WORKDIR/homebrew-tap" config user.name "github-actions[bot]"
+          git -C "$WORKDIR/homebrew-tap" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$WORKDIR/homebrew-tap" add Formula/discord-caps-copy-paste.rb
+          if git -C "$WORKDIR/homebrew-tap" diff --cached --quiet; then
+            exit 0
+          fi
+          git -C "$WORKDIR/homebrew-tap" commit -m "Publish discord-caps-copy-paste ${VERSION}"
+          git -C "$WORKDIR/homebrew-tap" push origin HEAD
