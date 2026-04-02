@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.3 - 2026-04-02
+
+- Fixed the generated Homebrew formula so `cargo install` does not receive `--locked` twice during macOS installs.
+- Verified the regression against a real Homebrew install path after the `v0.1.2` rollout exposed the duplicate flag.
+
 ## v0.1.2 - 2026-04-02
 
 - Scoped external-session discovery to the configured working directory when the installed Tether supports it, reducing cross-project attach races.

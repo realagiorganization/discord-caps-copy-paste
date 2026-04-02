@@ -70,7 +70,7 @@ This runs `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all
 Tagged releases build the Debian package, Homebrew formula asset, and source archive with:
 
 ```bash
-python3 ./scripts/build_release_assets.py --release-tag v0.1.2
+python3 ./scripts/build_release_assets.py --release-tag v0.1.3
 ```
 
 GitHub Actions uploads those artifacts to the matching GitHub Release and pushes the generated formula into `realagiorganization/homebrew-tap`.
