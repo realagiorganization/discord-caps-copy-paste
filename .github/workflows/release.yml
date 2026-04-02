@@ -55,7 +55,7 @@ jobs:
             PRERELEASE_FLAG="--prerelease"
           fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" --clobber dist/*
+            echo "Release $RELEASE_TAG already exists; skipping immutable asset upload."
           else
             gh release create "$RELEASE_TAG" $PRERELEASE_FLAG --generate-notes dist/*
           fi
