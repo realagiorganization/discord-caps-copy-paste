@@ -63,6 +63,12 @@ pub struct TerminalChoice {
     kind: TerminalKind,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SessionDiscovery {
+    directory: Option<PathBuf>,
+    before: BTreeSet<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TerminalKind {
     Kitty,
@@ -107,6 +113,7 @@ impl TerminalChoice {
     pub fn command(&self, cwd: &Path, title: &str, shell_script: &str) -> Command {
         let cwd_text = cwd.to_string_lossy().to_string();
         let mut command = Command::new(&self.program);
+        command.current_dir(cwd);
         match self.kind {
             TerminalKind::Kitty => {
                 command.args([
@@ -220,7 +227,7 @@ pub fn run(config: &AppConfig) -> Result<LaunchResult> {
     }
 
     ensure_tether_ready(tether_bin.as_os_str(), config.skip_tether_start)?;
-    let before = list_external_sessions(tether_bin.as_os_str())?;
+    let discovery = prepare_session_discovery(tether_bin.as_os_str(), &cwd)?;
     launch_terminal(
         &terminal,
         &cwd,
@@ -231,11 +238,11 @@ pub fn run(config: &AppConfig) -> Result<LaunchResult> {
     )?;
     let session_id = wait_for_new_session(
         tether_bin.as_os_str(),
-        &before,
+        &discovery,
         Duration::from_millis(config.discovery_timeout_ms),
         Duration::from_millis(config.discovery_poll_ms),
     )?;
-    attach_session(tether_bin.as_os_str(), &session_id, &config.platform)?;
+    attach_session(tether_bin.as_os_str(), &session_id, &cwd, &config.platform)?;
 
     Ok(LaunchResult {
         terminal: terminal.name,
@@ -336,24 +343,26 @@ pub fn choose_terminal(config: &AppConfig) -> Result<TerminalChoice> {
 pub fn parse_external_sessions(stdout: &str) -> BTreeSet<String> {
     stdout
         .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty())
         .filter(|line| !line.starts_with("No external sessions found"))
+        .filter(|line| !line.starts_with("ID "))
+        .filter(|line| !line.chars().all(|ch| ch == '─' || ch.is_whitespace()))
         .filter_map(|line| line.split_whitespace().next().map(ToOwned::to_owned))
         .collect()
 }
 
-pub fn wait_for_new_session(
+fn wait_for_new_session(
     tether_bin: &OsStr,
-    before: &BTreeSet<String>,
+    discovery: &SessionDiscovery,
     timeout: Duration,
     poll_interval: Duration,
 ) -> Result<String> {
     let deadline = Instant::now() + timeout;
     loop {
-        let after = list_external_sessions(tether_bin)?;
-        if let Some(new_session) = after.difference(before).next() {
-            return Ok(new_session.to_string());
+        let after = list_external_sessions(tether_bin, discovery.directory.as_deref())?;
+        if let Some(new_session) = detect_new_session(&discovery.before, &after)? {
+            return Ok(new_session);
         }
         if Instant::now() >= deadline {
             bail!("timed out waiting for a new external Codex session");
@@ -362,9 +371,8 @@ pub fn wait_for_new_session(
     }
 }
 
-fn attach_session(tether_bin: &OsStr, session_id: &str, platform: &str) -> Result<()> {
-    let status = Command::new(tether_bin)
-        .args(["attach", session_id, "-p", platform])
+fn attach_session(tether_bin: &OsStr, session_id: &str, cwd: &Path, platform: &str) -> Result<()> {
+    let status = build_attach_command(tether_bin, session_id, cwd, platform)
         .status()
         .with_context(|| format!("failed to run tether attach for session '{session_id}'"))?;
     if !status.success() {
@@ -417,9 +425,50 @@ fn launch_terminal(
     Ok(())
 }
 
-fn list_external_sessions(tether_bin: &OsStr) -> Result<BTreeSet<String>> {
-    let output = Command::new(tether_bin)
-        .args(["list", "--external", "-r", "codex"])
+fn build_attach_command(
+    tether_bin: &OsStr,
+    session_id: &str,
+    cwd: &Path,
+    platform: &str,
+) -> Command {
+    let cwd_text = cwd.to_string_lossy().into_owned();
+    let mut command = Command::new(tether_bin);
+    command
+        .args([
+            "attach", session_id, "-r", "codex", "-d", &cwd_text, "-p", platform,
+        ])
+        .current_dir(cwd);
+    command
+}
+
+fn build_list_external_sessions_command(tether_bin: &OsStr, directory: Option<&Path>) -> Command {
+    let mut command = Command::new(tether_bin);
+    command.args(["list", "--external", "-r", "codex"]);
+    if let Some(directory) = directory {
+        let directory_text = directory.to_string_lossy().into_owned();
+        command.args(["-d", &directory_text]);
+    }
+    command
+}
+
+fn prepare_session_discovery(tether_bin: &OsStr, cwd: &Path) -> Result<SessionDiscovery> {
+    match list_external_sessions(tether_bin, Some(cwd)) {
+        Ok(before) => Ok(SessionDiscovery {
+            directory: Some(cwd.to_path_buf()),
+            before,
+        }),
+        Err(_) => Ok(SessionDiscovery {
+            directory: None,
+            before: list_external_sessions(tether_bin, None)?,
+        }),
+    }
+}
+
+fn list_external_sessions(
+    tether_bin: &OsStr,
+    directory: Option<&Path>,
+) -> Result<BTreeSet<String>> {
+    let output = build_list_external_sessions_command(tether_bin, directory)
         .output()
         .context("failed to run tether list --external -r codex")?;
     if !output.status.success() {
@@ -427,6 +476,22 @@ fn list_external_sessions(tether_bin: &OsStr) -> Result<BTreeSet<String>> {
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     Ok(parse_external_sessions(&stdout))
+}
+
+fn detect_new_session(
+    before: &BTreeSet<String>,
+    after: &BTreeSet<String>,
+) -> Result<Option<String>> {
+    let mut new_sessions = after.difference(before).cloned();
+    let first = new_sessions.next();
+    let second = new_sessions.next();
+    match (first, second) {
+        (None, _) => Ok(None),
+        (Some(session_id), None) => Ok(Some(session_id)),
+        (Some(_), Some(_)) => bail!(
+            "multiple new external Codex sessions appeared; unable to determine which one to attach"
+        ),
+    }
 }
 
 fn resolve_program(program: &str) -> Result<PathBuf> {
@@ -526,5 +591,68 @@ mod tests {
         let preview = preview_prompt(&"x".repeat(120));
         assert!(preview.ends_with("..."));
         assert!(preview.len() <= 99);
+    }
+
+    #[test]
+    fn parse_external_sessions_ignores_tether_table_headers() {
+        let parsed = parse_external_sessions(
+            "ID           TYPE          RUNNING   PROMPT                         DIRECTORY                     \n\
+             ──────────── ───────────── ───────── ────────────────────────────── ──────────────────────────────\n\
+             019d4c94-0da codex         no        SUMMARIZE FUNCTIONALITY OF TH… /tmp/demo                     \n",
+        );
+        assert_eq!(parsed, BTreeSet::from(["019d4c94-0da".to_string()]));
+    }
+
+    #[test]
+    fn detect_new_session_requires_a_single_new_match() {
+        let before = BTreeSet::from(["a".to_string()]);
+        let after = BTreeSet::from(["a".to_string(), "b".to_string()]);
+        assert_eq!(
+            detect_new_session(&before, &after).expect("single match"),
+            Some("b".to_string())
+        );
+
+        let after_multiple = BTreeSet::from(["a".to_string(), "b".to_string(), "c".to_string()]);
+        assert!(detect_new_session(&before, &after_multiple).is_err());
+    }
+
+    #[test]
+    fn terminal_command_sets_spawn_cwd() {
+        let terminal = TerminalChoice {
+            name: "xterm".to_string(),
+            program: PathBuf::from("xterm"),
+            kind: TerminalKind::Xterm,
+        };
+        let command = terminal.command(Path::new("/tmp/demo"), DEFAULT_TITLE, "echo hi");
+        assert_eq!(command.get_current_dir(), Some(Path::new("/tmp/demo")));
+    }
+
+    #[test]
+    fn attach_command_uses_codex_runner_and_directory() {
+        let command = build_attach_command(
+            OsStr::new("tether"),
+            "019d4c94-0da",
+            Path::new("/tmp/demo"),
+            DEFAULT_PLATFORM,
+        );
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            args,
+            vec![
+                "attach".to_string(),
+                "019d4c94-0da".to_string(),
+                "-r".to_string(),
+                "codex".to_string(),
+                "-d".to_string(),
+                "/tmp/demo".to_string(),
+                "-p".to_string(),
+                DEFAULT_PLATFORM.to_string(),
+            ]
+        );
+        assert_eq!(command.get_current_dir(), Some(Path::new("/tmp/demo")));
     }
 }

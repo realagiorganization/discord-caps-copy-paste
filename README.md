@@ -11,8 +11,8 @@ In practice that means the repo ships a small machine-side launcher for Discord-
 - resolves prompt text from `--prompt`, `DCCP_PROMPT`, or clipboard tools such as `wl-paste`, `xclip`, `xsel`, and `pbpaste`
 - chooses one installed terminal at random from the supported set unless `--terminal` is pinned
 - launches `codex` in that terminal with the prompt as the initial request
-- waits for a new `tether list --external -r codex` session to appear
-- attaches the discovered session to the requested platform, default `discord`
+- waits for a new `tether list --external -r codex` session to appear, scoped to the target directory when Tether supports directory filtering
+- attaches the discovered session with explicit `codex` runner and directory context to the requested platform, default `discord`
 
 ## Supported terminals
 
@@ -70,7 +70,7 @@ This runs `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all
 Tagged releases build the Debian package, Homebrew formula asset, and source archive with:
 
 ```bash
-python3 ./scripts/build_release_assets.py --release-tag v0.1.1
+python3 ./scripts/build_release_assets.py --release-tag v0.1.2
 ```
 
 GitHub Actions uploads those artifacts to the matching GitHub Release and pushes the generated formula into `realagiorganization/homebrew-tap`.

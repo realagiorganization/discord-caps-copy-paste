@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2 - 2026-04-02
+
+- Scoped external-session discovery to the configured working directory when the installed Tether supports it, reducing cross-project attach races.
+- Passed explicit `codex` runner plus target directory to `tether attach`, and ensured terminal launches inherit the requested working directory even for terminals without a dedicated cwd flag.
+- Expanded unit coverage for Tether table parsing, single-session detection, attach command construction, and terminal cwd handling.
+
 ## v0.1.1 - 2026-04-02
 
 - Added `scripts/check.sh` as the single Rust quality gate for format, lint, test, and release-build verification.
